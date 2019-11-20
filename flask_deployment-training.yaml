@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flaskapp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flaskapp
+  template:
+    metadata:
+      labels:
+        app: flaskapp
+    spec:
+      containers:
+      - name: flaskapp
+        image: ethomatos/sample_flask:v4
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 5000
+        env:
+        - name: DD_AGENT_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: DD_TRACE_AGENT_PORT
+          value: '8126'
+        - name: DD_AGENT_STATSD_PORT
+          value: '8125'
+        - name: POSTGRES_SERVICE_HOST
+          value: postgres.default
+        - name: POSTGRES_SERVICE_PORT
+          value: "5433"
+        - name: DD_LOGS_INJECTION
+          value: "true"
+        volumeMounts:
+          - name: flasklogs
+            mountPath: /var/log
+      volumes:
+        - hostPath:
+            path: /var/log
+          name: flasklogs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flaskapp
+spec:
+  selector:
+    app: flaskapp
+  ports:
+  - name: http
+    protocol: TCP
+    port: 5000
+  type: LoadBalancer
+---
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: cm-datadog-confd
+  namespace: default
+data:
+  flasklogs.yaml: |-
+    init_config:
+    instances:
+    logs:
+    - type: file
+      path: /var/log/mylog.json
+      service: flask
+      source: python
+      sourcecategory: sourcecode
